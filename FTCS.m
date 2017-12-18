@@ -33,57 +33,48 @@ function [U, V] = FTCS(Finit, x,y, dx, dt, tf, kappa, U, varargin)
 	end
 end
 
+%%%
+% <latex>
+% $$
+% u_{i,j}^* = u_{i,j}^n - \frac{Co_{x,i,j}}{2} [u_{i+1,j}^n - u_{i-1,j}^n] + \alpha_x [u_{i+1,j}^n - 2 u_{i,j}^n + u_{i-1,j}^n]
+% $$
+% $$
+% v_{i,j}^* = v_{i,j}^n - \frac{Co_x}{2} [v_{i+1,j}^n - v_{i-1,j}^n] + \alpha_x [v_{i+1,j}^n - 2 v_{i,j}^n + v_{i-1,j}^n]
+% $$
+% $$
+% u_{i,j}^{n+1} = u_{i,j}^* - \frac{Co_y}{2} [u_{i,j+1}^* - u_{i,j-1}^*] + \alpha_y [u_{i,j+1}^* - 2 u_{i,j}^* + u_{i,j-1}^*]
+% $$
+% $$
+% v_{i,j}^{n+1} = v_{i,j}^* - \frac{Co_y}{2} [v_{i,j+1}^* - v_{i,j-1}^*] + \alpha_y [v_{i,j+1}^* - 2 v_{i,j}^* + v_{i,j-1}^*]
+% $$
+% </latex>
+%%%
 function [U, V] = FTCSTest(Finit, X, Y, dx, dt, tf, kappa, exactFunc) 
 	dy = dx(2); dx = dx(1); nx = size(X,1); ny = size(Y,1);
 	t = 0;
 	U = Finit(:,:,1);
 	V = Finit(:,:,1);
 	
+	[Utop, Vtop] = exactFunc(X(1,:),  Y(1,:),  t);
+	[Ubot, Vbot] = exactFunc(X(1,:),  Y(ny,:), t);
+	[Ulef, Vlef] = exactFunc(X(:,1),  Y(:,1),  t);
+	[Urig, Vrig] = exactFunc(X(:,nx), Y(:,ny), t);
+	U(nx,:) = Ubot; V(nx,:) = Vbot;
+	U(1,:)  = Utop; V(1,:)  = Vtop;
+	U(:,1)  = Ulef; V(:,1)  = Vrig;
+	U(:,ny) = Urig; V(:,ny) = Vlef;		
+	US = U; VS = V;
+		
 	while(t<tf+dt)
-		[Utop, Vtop] = exactFunc(X(1,:),  Y(1,:),  t);
-		[Ubot, Vbot] = exactFunc(X(1,:),  Y(ny,:), t);
-		[Ulef, Vlef] = exactFunc(X(:,1),  Y(:,1),  t);
-		[Urig, Vrig] = exactFunc(X(:,nx), Y(:,ny), t);
-		U(nx,:) = Utop; V(nx,:) = Vbot;
-		U(1,:)  = Ubot; V(1,:)  = Vtop;
-		U(:,1)  = Ulef; V(:,1)  = Vlef;
-		U(:,ny) = Urig; V(:,ny) = Vrig;
-		US = U; VS = V;
-		
-		%%%
-		% <latex>
-		% $$
-		% u_{i,j}^* = u_{i,j}^n - \frac{Co_{x,i,j}}{2} [u_{i+1,j}^n - u_{i-1,j}^n] + \alpha_x [u_{i+1,j}^n - 2 u_{i,j}^n + u_{i-1,j}^n]
-		% $$
-		% $$
-		% v_{i,j}^* = v_{i,j}^n - \frac{Co_x}{2} [v_{i+1,j}^n - v_{i-1,j}^n] + \alpha_x [v_{i+1,j}^n - 2 v_{i,j}^n + v_{i-1,j}^n]
-		% $$
-		% $$
-		% u_{i,j}^{n+1} = u_{i,j}^* - \frac{Co_y}{2} [u_{i,j+1}^* - u_{i,j-1}^*] + \alpha_y [u_{i,j+1}^* - 2 u_{i,j}^* + u_{i,j-1}^*]
-		% $$
-		% $$
-		% v_{i,j}^{n+1} = v_{i,j}^* - \frac{Co_y}{2} [v_{i,j+1}^* - v_{i,j-1}^*] + \alpha_y [v_{i,j+1}^* - 2 v_{i,j}^* + v_{i,j-1}^*]
-		% $$
-		% </latex>
-		%%%
-		
+%		figure(7); surf(X,Y,U); title(t); pause(.5); 
 		Co_x = U(2:nx-1,2:ny-1)*dt/dx; Co_y = V(2:nx-1,2:ny-1)*dt/dx;
 		alpha_x = kappa*dt/dx^2; alpha_y = kappa*dt/dy^2;
 		
-		US(2:nx-1,2:ny-1) = (1-2*alpha_x).*U(2:nx-1,2:ny-1)...
-			+ (alpha_x - Co_x/2).*U(3:nx,2:nx-1)...
-			+ (alpha_x + Co_x/2).*U(1:nx-2,2:nx-1);
-		VS(2:nx-1,2:ny-1) = (1-2*alpha_x).*V(2:nx-1,2:ny-1)...
-			+ (alpha_x + Co_x/2).*V(3:nx,2:nx-1)...
-			+ (alpha_x - Co_x/2).*V(1:nx-2,2:nx-1);
+		US(2:nx-1,2:ny-1) = U(2:nx-1,2:ny-1) - Co_x/2.*(U(3:nx,2:nx-1)-U(1:nx-2,2:nx-1))+alpha_y*(U(3:nx,2:nx-1) - 2*U(2:nx-1,2:nx-1) + U(1:nx-2,2:nx-1));
+		VS(2:nx-1,2:ny-1) = V(2:nx-1,2:ny-1) - Co_x/2.*(V(3:nx,2:nx-1)-V(1:nx-2,2:nx-1))+alpha_y*(V(3:nx,2:nx-1) - 2*V(2:nx-1,2:nx-1) + V(1:nx-2,2:nx-1));
 		
-		U(2:nx-1,2:ny-1)  = (1-2*alpha_y).*US(2:nx-1,2:ny-1)...
-			+ (alpha_y - Co_y/2).*US(2:nx-1,3:ny)...
-			+ (alpha_y + Co_y/2).*US(2:nx-1,1:ny-2);
-		V(2:nx-1, 2:ny-1) = (1-2*alpha_y).*VS(2:nx-1,2:ny-1)...
-			+ (alpha_y + Co_y/2).*VS(2:nx-1,3:ny)...
-			+ (alpha_y - Co_y/2).*VS(2:nx-1,1:ny-2);
-
+		U(2:nx-1,2:ny-1) = US(2:nx-1,2:ny-1) - Co_y/2.*(US(2:nx-1,3:nx)-US(2:nx-1,1:nx-2)) + alpha_x*(US(2:nx-1,3:nx)-2*US(2:nx-1,2:nx-1)+US(2:nx-1,1:nx-2));
+		V(2:nx-1,2:ny-1) = VS(2:nx-1,2:ny-1) - Co_y/2.*(VS(2:nx-1,3:nx)-VS(2:nx-1,1:nx-2)) + alpha_x*(VS(2:nx-1,3:nx)-2*VS(2:nx-1,2:nx-1)+VS(2:nx-1,1:nx-2));
 		t = t+dt;
 	end
 end

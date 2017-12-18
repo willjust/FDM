@@ -23,51 +23,79 @@ function [U,V] = CNTest(Finit, X,Y,dx,dt,tf,kappa,exactFunc)
 	t = 0;
 	U = Finit(:,:,1);
 	V = Finit(:,:,1);
+	b = zeros(nx,1);
+	A = zeros(nx);
 	
-	while(t<tf+dt)
-		[Utop, Vtop] = exactFunc(X(1,:),  Y(1,:),  t);
-		[Ubot, Vbot] = exactFunc(X(1,:),  Y(ny,:), t);
-		[Ulef, Vlef] = exactFunc(X(:,1),  Y(:,1),  t);
-		[Urig, Vrig] = exactFunc(X(:,nx), Y(:,ny), t);
-		U(nx,:) = Ubot; V(nx,:) = Vbot;
-		U(1,:)  = Utop; V(1,:)  = Vtop;
-		U(:,1)  = Ulef; V(:,1)  = Vlef;
-		U(:,ny) = Urig; V(:,ny) = Vrig;
-		US = U; VS = V;
-		
+	[Utop, Vtop] = exactFunc(X(1,:),  Y(1,:),  t);
+	[Ubot, Vbot] = exactFunc(X(1,:),  Y(ny,:), t);
+	[Ulef, Vlef] = exactFunc(X(:,1),  Y(:,1),  t);
+	[Urig, Vrig] = exactFunc(X(:,nx), Y(:,ny), t);
+	U(nx,:) = Ubot; V(nx,:) = Vbot;
+	U(1,:)  = Utop; V(1,:)  = Vtop;
+	U(:,1)  = Ulef; V(:,1)  = Vlef;
+	U(:,ny) = Urig; V(:,ny) = Vrig;
+ 		
+	while(t<tf+dt)		
 		Co_x = U*dt/dx; Co_y = V*dt/dx;
-		alpha = kappa*dt/dx^2;
-		c1 = -(Co_x + 2*alpha); c2 = 4*(1+alpha); c3 = Co_x - 2*alpha;
-		% Loop over x
-		for i = 2:nx-1
-			A = spdiags([c1(3:nx,i) c2*ones(nx-2,1) c3(1:nx-2,i)], -1:1, nx-2, nx-2);
-			% bx*
-			b = (Co_x(2:nx-1,i) + 2*alpha).*U(1:nx-2,i) +4*(1-alpha)*U(2:nx-1,i)+(2*alpha-Co_x(2:nx-1,i)).*U(3:nx,i);
-			b(1) = b(1) - c1(2,i)*U(1,i);
-			b(nx-2) =  b(nx-2) - c3(nx-1,i)*U(nx,i);
-			US(2:nx-1,i) = thomas(A,b);
-			% by*
-			b = (Co_x(2:nx-1,i) + 2*alpha).*V(1:nx-2,i) +4*(1-alpha)*V(2:nx-1,i)+(2*alpha-Co_x(2:nx-1,i)).*V(3:nx,i);
-			b(1) = b(1) - c1(1,i)*V(1,i);
-			b(nx-2) = b(nx-2) - c3(nx,i)*V(nx,i);
-			VS(2:nx-1,i) = thomas(A,b);
-		end
+		alpha = kappa*dt/dx^2; 
+		rhsc1 = alpha/2+Co_x/4; rhsc2 = 1 - alpha; rhsc3 = alpha/2 - Co_x/4;
+		lhsc1 = -rhsc1;	lhsc2 = 1 + alpha; lhsc3 = -rhsc3;
+		
 		% Loop over y
-		c1 = -(Co_y + 2*alpha); c2 = 4*(1+alpha); c3 = Co_y - 2*alpha;
 		for i = 2:ny-1
-			A = spdiags([c1(i,3:nx)' c2*ones(nx-2,1) c3(i,1:nx-2)'], -1:1, nx-2, nx-2);
 			
-			b = (Co_y(i,2:nx-1) + 2*alpha).*US(i,1:nx-2) +4*(1-alpha)*US(i,2:nx-1)+(2*alpha-Co_y(i,2:nx-1)).*US(i,3:nx);
-			b(1) = b(1) - c1(i,nx)*US(i,1);
-			b(nx-2) = b(nx-2) - c3(i,nx)*US(i,nx);
-			U(i,2:nx-1) = thomas(A,b);
+			% Create A (spdiags is doing some weird stuff)
+			for j = 2:nx-1
+				A(j,j) = lhsc2;
+				A(j,j+1) = lhsc3(j+1,i);
+				A(j,j-1) = lhsc1(j-1,i);
+			end
+			A(1,1)= lhsc2; A(1,2) = lhsc3(1,i);
+			A(nx,nx) = lhsc2; A(nx, nx-1) = lhsc1(nx,i);
 			
-			b = (Co_x(i,2:nx-1) + 2*alpha).*VS(i,1:nx-2) +4*(1-alpha)*VS(i,2:nx-1)+(2*alpha-Co_y(i,2:nx-1)).*VS(i,3:nx);
-			b(1) = b(1) - c1(i,1)*VS(i,1);
-			b(nx-2) = b(nx-2) - c3(i,nx)*VS(i,nx);
-			V(i,2:nx-1) = thomas(A,b);
+			% by
+			b(2:nx-1) = rhsc3(3:nx)'.*U(3:nx,i) + rhsc2*U(2:nx-1,i) + rhsc1(1:nx-2)'.*U(1:nx-2,i);
+			b(1) = U(1,i)+rhsc1(1)*U(1,i);
+			b(nx) = U(nx,i)+rhsc3(nx)*U(1,i);
+			temp = thomas(A,b);
+			U(2:nx-1,i) = temp(2:nx-1);
+			
+			%bx
+			b(2:nx-1) = rhsc3(3:nx)'.*V(3:nx,i) + rhsc2*V(2:nx-1,i) + rhsc1(1:nx-2)'.*V(1:nx-2,i);
+			b(1) = V(1,i) + rhsc3(1)*V(1,i);
+			b(nx) = V(nx,i) + rhsc1(nx)*V(nx,i);
+			temp = thomas(A,b);
+			V(2:nx-1,i) = temp(2:nx-1);
 		end
 		
+		% Loop over y
+		rhsc1 = alpha/2 + Co_y/4; rhsc2 = 1-alpha; rhsc3 = alpha/2 - Co_y/4;
+		lhsc1 = -rhsc1; lhsc2 = 1+alpha; lhsc3 = -rhsc3;
+
+		for i = 2:ny-1
+			% Create A
+			for j = 2:nx-1
+				A(j,j) = lhsc2;
+				A(j,j-1) = lhsc1(j-1,i);
+				A(j,j+1) = lhsc3(j+1,i);
+			end
+			A(1,1)= lhsc2; A(1,2) = lhsc3(1,i);
+			A(nx,nx) = lhsc2; A(nx, nx-1) = lhsc1(nx,i);
+
+			b(2:nx-1) = rhsc3(3:nx)'.*U(i,3:nx)' + rhsc2*U(i,2:nx-1)' + rhsc1(1:nx-2)'.*U(i,1:nx-2)';
+			b(1) = U(i,1) + rhsc3(1)*Ulef(i);
+			b(nx) = U(i,nx) + rhsc1(nx).*Urig(i);
+			temp = thomas(A,b);
+			U(i, 2:nx-1) = temp(2:nx-1);
+			
+			b(2:nx-1) = rhsc3(3:nx)'.*V(i,3:nx)' + rhsc2*V(i,2:nx-1)' + rhsc1(1:nx-2)'.*V(i,1:nx-2)';
+			b(1) = V(i,1) + rhsc1(1)*V(i,1);
+			b(nx) = V(i,nx) + rhsc3(nx).*V(i,nx);
+			temp = thomas(A,b);
+			V(i, 2:nx-1) = temp(2:nx-1);
+		end
+		figure(7); surf(X,Y,V); title(t); pause(dt); 
+
 		t = t+dt;
 	end
 end
